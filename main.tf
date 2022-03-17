@@ -2,7 +2,7 @@
  *
  * ## Description
  *
- * Provisions a guard duty detector and sets up a subscription 
+ * Provisions a guard duty detector and sets up a subscription
  *
  * ## Usage
  *
