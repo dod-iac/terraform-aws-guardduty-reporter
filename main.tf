@@ -1,45 +1,32 @@
 /**
- * # Terraform Module template
- *
- * This repository is meant to be a template for creating new terraform modules.
- *
- * ## Creating a new Terraform Module
- *
- * 1. Clone this repo, renaming appropriately.
- * 1. Write your terraform code in the root dir.
- * 1. Ensure you've completed the [Developer Setup](#developer-setup).
- * 1. In the root dir, modify the `module` line for the repo path. Then run `make tidy`, which updates the `go.sum` file and downloads dependencies.
- * 1. Update the terratest tests in the examples and test directories.
- * 1. Run your terratest tests to ensure they work as expected using instructions below.
- *
- * ---
- *
- * <!-- DELETE ABOVE THIS LINE -->
  *
  * ## Description
  *
- * Please put a description of what this module does here
+ * Provisions a guard duty detector and sets up a subscription
  *
  * ## Usage
  *
- * Add Usage information here
+ * After deploying the [Report Receiver](https://github.com/dod-iac/terraform-aws-report-receiver) in the receiving account, use the output role and kinesis from that module with this
  *
  * Resources:
  *
- * * [Article Example](https://article.example.com)
  *
- * ```hcl
- * module "example" {
- *   source = "dod-iac/example/aws"
- *
- *   tags = {
- *     Project     = var.project
- *     Application = var.application
- *     Environment = var.environment
- *     Automation  = "Terraform"
- *   }
- * }
- * ```
+  ```hcl
+    module "guardduty_stream" {
+    source                = "../../modules/kinesiss-stream-config"
+    source_account        = data.aws_caller_identity.current.id
+    security_group_ids    = [module.elmo.es_ingress_sg]
+    subnet_ids            = module.elmo.private_subnet_ids
+    opensearch_domain_arn = module.elmo.es_domain
+    stream_type           = "guardduty"
+    error_logging_bucket  = module.elmo.logging_bucket
+    }
+    module "guardduty" {
+    source             = "../../modules/guard-duty-deployment"
+    role_arn           = module.guardduty_stream.publish_role_arn
+    kinesis_stream_arn = module.guardduty_stream.kinesis_stream_arn
+    }
+```
  *
  * ## Testing
  *
@@ -70,8 +57,26 @@
  *
  *
  */
+resource "aws_guardduty_detector" "this" {
+  count  = var.deploy_detector ? 1 : 0
+  enable = true
+}
 
-data "aws_caller_identity" "current" {}
-data "aws_iam_account_alias" "current" {}
-data "aws_partition" "current" {}
-data "aws_region" "current" {}
+resource "aws_cloudwatch_event_rule" "this" {
+  name        = "report-guard-duty-finding"
+  description = "Report all guard duty findings"
+
+  event_pattern = <<EOF
+{
+  "detail-type": [
+    "GuardDuty Finding"
+  ]
+}
+EOF
+}
+
+resource "aws_cloudwatch_event_target" "this" {
+  rule     = aws_cloudwatch_event_rule.this.name
+  arn      = var.kinesis_stream_arn
+  role_arn = var.role_arn
+}
