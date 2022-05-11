@@ -76,7 +76,6 @@ EOF
 }
 
 resource "aws_cloudwatch_event_target" "this" {
-  rule     = aws_cloudwatch_event_rule.this.name
-  arn      = var.kinesis_stream_arn
-  role_arn = var.role_arn
+  rule = aws_cloudwatch_event_rule.this.name
+  arn  = var.kinesis_stream_arn
 }
